@@ -1,11 +1,22 @@
 const IPTV_PLAYLIST_URL = 'https://iptv-org.github.io/iptv/index.m3u';
 
+// Category display order (iptv-org standard group-title values)
+const CATEGORY_ORDER = [
+  'News', 'Kids', 'Entertainment', 'Sports', 'Movies', 'Music',
+  'Documentary', 'Cooking', 'Travel', 'Science', 'Education',
+  'Lifestyle', 'Religion', 'Business', 'Auto', 'Family',
+  'Animated', 'Action', 'Classic', 'Comedy', 'Horror', 'Romance',
+  'Series', 'Weather', 'XXX', 'Other'
+];
+
 let channels = [];
 let currentHls = null;
+let activeCategory = 'All';
 
 const elements = {
   searchInput: document.getElementById('searchInput'),
   channelList: document.getElementById('channelList'),
+  categoryTabs: document.getElementById('categoryTabs'),
   loadingState: document.getElementById('loadingState'),
   errorState: document.getElementById('errorState'),
   retryBtn: document.getElementById('retryBtn'),
@@ -22,6 +33,7 @@ async function fetchPlaylist() {
     elements.loadingState.classList.remove('hidden');
     elements.errorState.classList.add('hidden');
     elements.channelList.classList.add('hidden');
+    elements.categoryTabs.innerHTML = '';
 
     const response = await fetch(IPTV_PLAYLIST_URL);
     if (!response.ok) throw new Error('Failed to fetch playlist');
@@ -32,7 +44,8 @@ async function fetchPlaylist() {
     elements.loadingState.classList.add('hidden');
     elements.channelList.classList.remove('hidden');
 
-    renderChannels(channels);
+    renderCategoryTabs();
+    renderChannels(getFilteredChannels());
   } catch (error) {
     console.error('Error fetching playlist:', error);
     elements.loadingState.classList.add('hidden');
@@ -53,10 +66,15 @@ function parseM3U(text) {
       if (nextLine && !nextLine.startsWith('#')) {
         const nameMatch = line.match(/,(.+)$/);
         const name = nameMatch ? nameMatch[1].trim() : 'Unknown Channel';
+        const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+        const rawLogo = logoMatch ? logoMatch[1].trim() : '';
+        const logo = /^https?:\/\//i.test(rawLogo) ? rawLogo : '';
+        const groupMatch = line.match(/group-title="([^"]+)"/);
+        const group = groupMatch ? groupMatch[1].trim() : 'Other';
         const url = nextLine;
 
         if (url && (url.startsWith('http') || url.startsWith('https'))) {
-          parsedChannels.push({ name, url });
+          parsedChannels.push({ name, url, logo, group });
         }
       }
     }
@@ -65,28 +83,84 @@ function parseM3U(text) {
   return parsedChannels;
 }
 
+function getCategories() {
+  const groupSet = new Set(channels.map(c => c.group));
+  const ordered = CATEGORY_ORDER.filter(g => groupSet.has(g));
+  const rest = [...groupSet].filter(g => !CATEGORY_ORDER.includes(g)).sort();
+  return ['All', ...ordered, ...rest];
+}
+
+function renderCategoryTabs() {
+  const categories = getCategories();
+  elements.categoryTabs.innerHTML = '';
+
+  categories.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.textContent = cat;
+    btn.dataset.category = cat;
+    btn.className = getCategoryTabClass(cat === activeCategory);
+    btn.addEventListener('click', () => {
+      activeCategory = cat;
+      document.querySelectorAll('#categoryTabs button').forEach(b => {
+        b.className = getCategoryTabClass(b.dataset.category === activeCategory);
+      });
+      elements.searchInput.value = '';
+      renderChannels(getFilteredChannels());
+    });
+    elements.categoryTabs.appendChild(btn);
+  });
+}
+
+function getCategoryTabClass(active) {
+  const base = 'px-4 py-1.5 rounded-full text-sm font-medium transition whitespace-nowrap';
+  return active
+    ? `${base} bg-blue-600 text-white`
+    : `${base} bg-gray-800 text-gray-300 hover:bg-gray-700`;
+}
+
+function getFilteredChannels() {
+  const search = elements.searchInput.value.toLowerCase();
+  return channels.filter(ch => {
+    const matchesCategory = activeCategory === 'All' || ch.group === activeCategory;
+    const matchesSearch = !search || ch.name.toLowerCase().includes(search);
+    return matchesCategory && matchesSearch;
+  });
+}
+
 function renderChannels(channelsToRender) {
   elements.channelList.innerHTML = '';
 
   if (channelsToRender.length === 0) {
     elements.channelList.innerHTML = `
-      <div class="text-center py-8 text-gray-400 text-sm">
+      <div class="col-span-full text-center py-12 text-gray-400 text-sm">
         No channels found
       </div>
     `;
     return;
   }
 
-  channelsToRender.forEach((channel, index) => {
-    const channelItem = document.createElement('button');
-    channelItem.className = 'w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-    channelItem.textContent = channel.name;
-    channelItem.setAttribute('data-index', index);
+  channelsToRender.forEach(channel => {
+    const card = document.createElement('button');
+    card.className = 'flex flex-col items-center gap-2 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500 text-center group';
 
-    channelItem.addEventListener('click', () => playChannel(channel));
+    const logoHtml = channel.logo
+      ? `<img src="${channel.logo}" alt="${escapeHtml(channel.name)} logo" class="w-12 h-12 object-contain rounded-lg bg-gray-700 p-1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />`
+      : '';
+    const fallbackHtml = `<div class="${channel.logo ? 'hidden' : 'flex'} w-12 h-12 items-center justify-center rounded-lg bg-gray-700 text-gray-400 text-xl">📺</div>`;
 
-    elements.channelList.appendChild(channelItem);
+    card.innerHTML = `
+      ${logoHtml}
+      ${fallbackHtml}
+      <span class="text-xs text-gray-300 group-hover:text-white leading-tight line-clamp-2 w-full">${escapeHtml(channel.name)}</span>
+    `;
+
+    card.addEventListener('click', () => playChannel(channel));
+    elements.channelList.appendChild(card);
   });
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function playChannel(channel) {
@@ -102,11 +176,12 @@ function playChannel(channel) {
   const video = elements.videoPlayer;
   const streamUrl = channel.url;
 
-  if (streamUrl.endsWith('.m3u8')) {
+  const baseUrl = streamUrl.split('?')[0];
+  if (baseUrl.endsWith('.m3u8')) {
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = streamUrl;
-      video.addEventListener('loadedmetadata', hideStreamLoading);
-      video.addEventListener('error', showStreamError);
+      video.addEventListener('loadedmetadata', hideStreamLoading, { once: true });
+      video.addEventListener('error', showStreamError, { once: true });
     } else if (Hls.isSupported()) {
       currentHls = new Hls({
         enableWorker: true,
@@ -136,8 +211,8 @@ function playChannel(channel) {
     }
   } else {
     video.src = streamUrl;
-    video.addEventListener('loadedmetadata', hideStreamLoading);
-    video.addEventListener('error', showStreamError);
+    video.addEventListener('loadedmetadata', hideStreamLoading, { once: true });
+    video.addEventListener('error', showStreamError, { once: true });
   }
 }
 
@@ -161,15 +236,8 @@ function showStreamError() {
   elements.streamError.classList.remove('hidden');
 }
 
-function filterChannels(searchTerm) {
-  const filtered = channels.filter(channel =>
-    channel.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  renderChannels(filtered);
-}
-
-elements.searchInput.addEventListener('input', (e) => {
-  filterChannels(e.target.value);
+elements.searchInput.addEventListener('input', () => {
+  renderChannels(getFilteredChannels());
 });
 
 elements.retryBtn.addEventListener('click', fetchPlaylist);
