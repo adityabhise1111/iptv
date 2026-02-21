@@ -65,12 +65,21 @@ function parseM3U(text) {
   return parsedChannels;
 }
 
+let activeChannelBtn = null;
+
+const CHANNEL_ITEM_BASE_CLASSES = [
+  'w-full', 'text-left', 'px-3', 'py-4', 'rounded-lg', 'transition', 'text-sm',
+  'focus:outline-none', 'focus:ring-2', 'focus:ring-blue-500', 'border'
+];
+const CHANNEL_ITEM_INACTIVE_CLASSES = ['bg-gray-800', 'border-gray-700', 'hover:bg-gray-700', 'hover:border-blue-500'];
+const CHANNEL_ITEM_ACTIVE_CLASSES = ['bg-gray-700', 'border-blue-500'];
+
 function renderChannels(channelsToRender) {
   elements.channelList.innerHTML = '';
 
   if (channelsToRender.length === 0) {
     elements.channelList.innerHTML = `
-      <div class="text-center py-8 text-gray-400 text-sm">
+      <div class="col-span-full text-center py-8 text-gray-400 text-sm">
         No channels found
       </div>
     `;
@@ -79,11 +88,38 @@ function renderChannels(channelsToRender) {
 
   channelsToRender.forEach((channel, index) => {
     const channelItem = document.createElement('button');
-    channelItem.className = 'w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-    channelItem.textContent = channel.name;
+    channelItem.classList.add(...CHANNEL_ITEM_BASE_CLASSES, ...CHANNEL_ITEM_INACTIVE_CLASSES);
+    const dot = document.createElement('span');
+    dot.className = 'w-2 h-2 rounded-full bg-red-500 flex-shrink-0';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'font-medium text-gray-100 truncate';
+    nameSpan.textContent = channel.name;
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'flex items-center gap-2 mb-1';
+    titleRow.appendChild(dot);
+    titleRow.appendChild(nameSpan);
+
+    const liveLabel = document.createElement('span');
+    liveLabel.className = 'text-xs text-gray-400';
+    liveLabel.textContent = 'Live';
+
+    channelItem.appendChild(titleRow);
+    channelItem.appendChild(liveLabel);
     channelItem.setAttribute('data-index', index);
 
-    channelItem.addEventListener('click', () => playChannel(channel));
+    channelItem.addEventListener('click', () => {
+      if (activeChannelBtn) {
+        activeChannelBtn.classList.remove(...CHANNEL_ITEM_ACTIVE_CLASSES);
+        activeChannelBtn.classList.add(...CHANNEL_ITEM_INACTIVE_CLASSES);
+      }
+      channelItem.classList.remove(...CHANNEL_ITEM_INACTIVE_CLASSES);
+      channelItem.classList.add(...CHANNEL_ITEM_ACTIVE_CLASSES);
+      activeChannelBtn = channelItem;
+      playChannel(channel);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 
     elements.channelList.appendChild(channelItem);
   });
