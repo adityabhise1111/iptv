@@ -9,9 +9,52 @@ const SWITCH_DEBOUNCE_MS = 140;
 const STREAM_RETRY_LIMIT = 1;
 const STREAM_RETRY_DELAY_MS = 900;
 
+const MAIN_CATEGORIES = [
+  'All',
+  'News',
+  'Sports',
+  'Movies',
+  'Kids',
+  'Music',
+  'Entertainment',
+  'Education',
+  'Lifestyle',
+  'Documentary',
+  'Religious',
+  'Other'
+];
+
+const CATEGORY_PRIORITY = [
+  'News',
+  'Sports',
+  'Movies',
+  'Kids',
+  'Music',
+  'Entertainment',
+  'Education',
+  'Documentary',
+  'Lifestyle',
+  'Religious',
+  'Other'
+];
+
+const CATEGORY_KEYWORDS = {
+  News: ['news', 'newscast', 'headline', 'journal', 'bulletin', 'current affairs'],
+  Sports: ['sports', 'sport', 'football', 'soccer', 'cricket', 'nba', 'nfl', 'tennis', 'f1'],
+  Movies: ['movie', 'movies', 'film', 'cinema', 'blockbuster'],
+  Kids: ['kids', 'kid', 'children', 'child', 'cartoon', 'animation', 'anime', 'nursery'],
+  Music: ['music', 'radio', 'audio', 'song', 'songs', 'hits', 'mtv'],
+  Entertainment: ['entertainment', 'general', 'variety', 'show', 'drama', 'comedy'],
+  Education: ['education', 'educational', 'learning', 'school', 'science', 'history', 'knowledge'],
+  Documentary: ['documentary', 'docu', 'nature', 'wildlife'],
+  Lifestyle: ['lifestyle', 'travel', 'food', 'cooking', 'fashion', 'health', 'fitness'],
+  Religious: ['religious', 'religion', 'faith', 'islamic', 'christian', 'hindu', 'spiritual']
+};
+
+const TAB_CATEGORIES = MAIN_CATEGORIES.filter((category) => category !== 'All');
+
 let channels = [];
 let channelByUrl = new Map();
-let groupedChannels = {};
 let selectedChannel = null;
 let selectedCategory = 'All';
 let searchQuery = '';
@@ -24,6 +67,7 @@ let visibleCount = VISIBLE_BATCH_SIZE;
 let activeSwitchToken = 0;
 let autoRetryTimer = null;
 let isLoadingMore = false;
+let tabsRendered = false;
 
 const mounts = {
   searchBar: document.getElementById('searchBarMount'),
@@ -52,6 +96,8 @@ function initializeStaticUI() {
     currentChannel: document.getElementById('currentChannel')
   };
 
+  ensureCategoryTabsRendered();
+
   elements.searchInput.addEventListener('input', handleSearchInput);
   mounts.retryBtn.addEventListener('click', fetchPlaylist);
   mounts.contentArea.addEventListener('scroll', handleContentScroll, { passive: true });
@@ -60,6 +106,33 @@ function initializeStaticUI() {
   mounts.channelGrid.addEventListener('click', handleChannelClick);
 
   bindVideoLifecycleListeners();
+}
+
+function ensureCategoryTabsRendered() {
+  if (tabsRendered) {
+    return;
+  }
+
+  mounts.categoryTabs.innerHTML = renderCategoryTabs(TAB_CATEGORIES, selectedCategory);
+  tabsRendered = true;
+}
+
+function updateCategoryTabState() {
+  const tabButtons = mounts.categoryTabs.querySelectorAll('[data-category]');
+
+  tabButtons.forEach((button) => {
+    const isActive = button.getAttribute('data-category') === selectedCategory;
+
+    button.classList.toggle('bg-blue-600', isActive);
+    button.classList.toggle('border-blue-500', isActive);
+    button.classList.toggle('text-white', isActive);
+
+    button.classList.toggle('bg-gray-800', !isActive);
+    button.classList.toggle('border-gray-700', !isActive);
+    button.classList.toggle('text-gray-300', !isActive);
+    button.classList.toggle('hover:bg-gray-700', !isActive);
+    button.classList.toggle('hover:text-white', !isActive);
+  });
 }
 
 function handleSearchInput(event) {
@@ -80,7 +153,12 @@ function handleCategoryClick(event) {
   const target = event.target.closest('[data-category]');
   if (!target) return;
 
-  selectedCategory = target.getAttribute('data-category') || 'All';
+  const nextCategory = target.getAttribute('data-category') || 'All';
+  if (nextCategory === selectedCategory) {
+    return;
+  }
+
+  selectedCategory = nextCategory;
   resetVisibleWindow();
   renderDynamicUI();
 }
@@ -111,7 +189,6 @@ function handleChannelClick(event) {
 
 async function fetchPlaylist() {
   try {
-    // Abort previous playlist request so outdated network responses never overwrite current UI.
     if (playlistAbortController) {
       playlistAbortController.abort();
     }
@@ -128,15 +205,6 @@ async function fetchPlaylist() {
     const text = await response.text();
     channels = parseM3U(text);
     channelByUrl = new Map(channels.map((channel) => [channel.url, channel]));
-
-    groupedChannels = channels.reduce((accumulator, channel) => {
-      const category = channel.category || 'Uncategorized';
-      if (!accumulator[category]) {
-        accumulator[category] = [];
-      }
-      accumulator[category].push(channel);
-      return accumulator;
-    }, {});
 
     mounts.loadingState.classList.add('hidden');
     mounts.channelGrid.classList.remove('hidden');
@@ -175,8 +243,13 @@ function parseM3U(text) {
     const nameMatch = line.match(/,(.+)$/);
     const name = nameMatch ? nameMatch[1].trim() : 'Unknown Channel';
 
-    const categoryMatch = line.match(/group-title="([^"]*)"/i);
-    const category = categoryMatch?.[1]?.trim() || 'Uncategorized';
+    const groupTitleMatch = line.match(/group-title="([^"]*)"/i);
+    const groupTitleRaw = groupTitleMatch?.[1]?.trim() || '';
+    const categoryTags = parseCategoryTags(groupTitleRaw);
+
+    // Example usage:
+    // group-title "Animation;Kids;Music" -> ["Animation", "Kids", "Music"] -> "Kids"
+    const category = mapRawTagsToMainCategory(categoryTags);
 
     const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
     const logo = logoMatch?.[1]?.trim() || undefined;
@@ -190,8 +263,51 @@ function parseM3U(text) {
   return parsedChannels;
 }
 
-function getCategories() {
-  return Object.keys(groupedChannels).sort((left, right) => left.localeCompare(right));
+function parseCategoryTags(rawGroupTitle) {
+  if (!rawGroupTitle) {
+    return [];
+  }
+
+  return rawGroupTitle
+    .split(';')
+    .map((item) => item.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function mapRawTagsToMainCategory(rawTags) {
+  if (!rawTags.length) {
+    return 'Other';
+  }
+
+  const normalizedTags = rawTags.map((tag) => tag.toLowerCase());
+  const tokenSet = new Set();
+
+  normalizedTags.forEach((tag) => {
+    tokenSet.add(tag);
+    const words = tag.split(/[^a-z0-9]+/).filter(Boolean);
+    words.forEach((word) => tokenSet.add(word));
+  });
+
+  for (const category of CATEGORY_PRIORITY) {
+    if (category === 'Other') {
+      continue;
+    }
+
+    const keywords = CATEGORY_KEYWORDS[category];
+    const matched = keywords.some((keyword) => {
+      if (tokenSet.has(keyword)) {
+        return true;
+      }
+
+      return normalizedTags.some((tag) => tag.includes(keyword));
+    });
+
+    if (matched) {
+      return category;
+    }
+  }
+
+  return 'Other';
 }
 
 function getFilteredChannels() {
@@ -205,11 +321,11 @@ function getFilteredChannels() {
 }
 
 function renderDynamicUI() {
-  mounts.categoryTabs.innerHTML = renderCategoryTabs(getCategories(), selectedCategory);
+  updateCategoryTabState();
 
-  // Render only a window of channels to keep DOM light for very large playlists.
   filteredChannels = getFilteredChannels();
   const visibleChannels = filteredChannels.slice(0, visibleCount);
+
   mounts.channelGrid.innerHTML = renderChannelGrid(
     visibleChannels,
     selectedChannel,
@@ -247,14 +363,12 @@ function scheduleChannelSwitch(channel) {
     clearTimeout(switchDebounceTimer);
   }
 
-  // Debounce rapid taps to prevent overlapping destroy/create player cycles.
   switchDebounceTimer = setTimeout(() => {
     loadChannel(channel);
   }, SWITCH_DEBOUNCE_MS);
 }
 
 function loadChannel(channel, attempt = 0) {
-  // Token invalidates stale async callbacks when users switch channels quickly.
   activeSwitchToken += 1;
   const switchToken = activeSwitchToken;
 
@@ -412,7 +526,6 @@ function stopCurrentStream() {
   }
 
   if (currentHls) {
-    // Destroy hls.js instance before loading the next stream to release buffers/listeners.
     currentHls.destroy();
     currentHls = null;
   }
