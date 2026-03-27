@@ -11,8 +11,8 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
 </head>
-  <body class="bg-gray-900 text-gray-100">
-    <div class="min-h-screen flex flex-col">
+  <body class="bg-gray-900 text-gray-100 h-screen overflow-hidden">
+    <div class="h-full flex flex-col">
       <!-- Header -->
       <header class="bg-gray-800 border-b border-gray-700 py-4 px-6">
         <h1 class="text-2xl font-bold text-blue-400">📺 Free Live TV – Worldwide</h1>
@@ -20,12 +20,12 @@
       </header>
 
       <!-- Main Content -->
-      <main class="flex-1 container mx-auto px-4 py-6 max-w-7xl space-y-4">
+      <main class="flex-1 min-h-0 container mx-auto px-4 py-6 max-w-7xl flex flex-col gap-4 overflow-hidden">
         <section id="searchBarMount"></section>
         <section id="videoPlayerMount"></section>
         <section id="categoryTabsMount"></section>
 
-        <section id="contentArea" class="space-y-4">
+        <section id="contentArea" class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
           <div id="loadingState" class="text-center py-10">
             <div class="animate-pulse">
               <div class="h-4 bg-gray-700 rounded w-64 mx-auto mb-3"></div>
@@ -45,24 +45,23 @@
           </div>
 
           <div id="channelGridMount" class="hidden"></div>
+
+          <footer class="bg-gray-800 border border-gray-700 py-6 px-6 rounded-xl">
+            <div class="container mx-auto max-w-7xl">
+              <h3 class="text-sm font-semibold text-gray-300 mb-2">⚖️ Legal Disclaimer</h3>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                This website only aggregates publicly available IPTV streams from third-party sources.
+                We do not host, store, or distribute any video content on our servers.
+                All streams are provided by their respective broadcasters and are subject to their terms of use.
+                If you are the copyright holder and believe a stream should be removed, please contact the original source.
+              </p>
+              <p class="text-xs text-gray-500 mt-3">
+                Data source: <a href="https://github.com/iptv-org/iptv" target="_blank" class="text-blue-400 hover:underline">iptv-org</a>
+              </p>
+            </div>
+          </footer>
         </section>
       </main>
-
-      <!-- Footer Disclaimer -->
-      <footer class="bg-gray-800 border-t border-gray-700 py-6 px-6 mt-12">
-        <div class="container mx-auto max-w-7xl">
-          <h3 class="text-sm font-semibold text-gray-300 mb-2">⚖️ Legal Disclaimer</h3>
-          <p class="text-xs text-gray-400 leading-relaxed">
-            This website only aggregates publicly available IPTV streams from third-party sources.
-            We do not host, store, or distribute any video content on our servers.
-            All streams are provided by their respective broadcasters and are subject to their terms of use.
-            If you are the copyright holder and believe a stream should be removed, please contact the original source.
-          </p>
-          <p class="text-xs text-gray-500 mt-3">
-            Data source: <a href="https://github.com/iptv-org/iptv" target="_blank" class="text-blue-400 hover:underline">iptv-org</a>
-          </p>
-        </div>
-      </footer>
     </div>
 
     <script type="module" src="/script.js"></script>
