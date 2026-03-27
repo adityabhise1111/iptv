@@ -11,7 +11,7 @@ export function renderVideoPlayer() {
           </div>
         </div>
 
-        <video id="videoPlayer" class="w-full aspect-video rounded-lg hidden" controls autoplay></video>
+        <video id="videoPlayer" class="w-full aspect-video rounded-lg hidden" controls autoplay playsinline preload="none"></video>
 
         <div id="streamLoading" class="absolute inset-0 bg-gray-900/75 rounded-lg flex items-center justify-center hidden">
           <div class="text-center">
