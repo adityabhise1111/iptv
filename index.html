@@ -14,13 +14,17 @@
   <body class="bg-gray-900 text-gray-100 h-screen overflow-hidden">
     <div class="h-full flex flex-col">
       <!-- Header -->
-      <header class="bg-gray-800 border-b border-gray-700 py-4 px-6">
-        <h1 class="text-2xl font-bold text-blue-400">📺 Free Live TV – Worldwide</h1>
-        <p class="text-sm text-gray-400 mt-1">Watch public IPTV channels from around the world</p>
+      <header class="bg-gray-800 border-b border-gray-700 py-2 px-4 flex items-center justify-between">
+        <h1 class="text-lg font-bold text-blue-400">📺 Free Live TV</h1>
+        <button id="searchToggleBtn" type="button" class="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition" aria-label="Search channels">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
       </header>
 
       <!-- Main Content -->
-      <main class="flex-1 min-h-0 container mx-auto px-4 py-6 max-w-7xl flex flex-col gap-4 overflow-hidden">
+      <main class="flex-1 min-h-0 container mx-auto px-0 py-0 md:px-4 md:py-6 max-w-7xl flex flex-col gap-0 md:gap-4 overflow-hidden">
         <section id="searchBarMount"></section>
         <section id="videoPlayerMount"></section>
         <section id="categoryTabsMount"></section>

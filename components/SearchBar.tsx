@@ -1,6 +1,6 @@
 export function renderSearchBar(searchQuery: string = '') {
   return `
-    <div class="bg-gray-800 border border-gray-700 rounded-xl p-3">
+    <div id="searchBarContainer" class="bg-gray-800 border border-gray-700 rounded-xl p-3 hidden md:block">
       <label for="searchInput" class="sr-only">Search channels</label>
       <input
         id="searchInput"
