@@ -68,9 +68,11 @@ let activeSwitchToken = 0;
 let autoRetryTimer = null;
 let isLoadingMore = false;
 let tabsRendered = false;
+let searchBarVisible = false;
 
 const mounts = {
   searchBar: document.getElementById('searchBarMount'),
+  searchToggleBtn: document.getElementById('searchToggleBtn'),
   videoPlayer: document.getElementById('videoPlayerMount'),
   categoryTabs: document.getElementById('categoryTabsMount'),
   contentArea: document.getElementById('contentArea'),
@@ -88,6 +90,7 @@ function initializeStaticUI() {
 
   elements = {
     searchInput: document.getElementById('searchInput'),
+    searchBarContainer: document.getElementById('searchBarContainer'),
     videoPlayer: document.getElementById('videoPlayer'),
     placeholder: document.getElementById('placeholder'),
     streamLoading: document.getElementById('streamLoading'),
@@ -99,6 +102,7 @@ function initializeStaticUI() {
   ensureCategoryTabsRendered();
 
   elements.searchInput.addEventListener('input', handleSearchInput);
+  mounts.searchToggleBtn.addEventListener('click', handleSearchToggle);
   mounts.retryBtn.addEventListener('click', fetchPlaylist);
   mounts.contentArea.addEventListener('scroll', handleContentScroll, { passive: true });
 
@@ -147,6 +151,25 @@ function handleSearchInput(event) {
     resetVisibleWindow();
     renderDynamicUI();
   }, 180);
+}
+
+function handleSearchToggle() {
+  searchBarVisible = !searchBarVisible;
+
+  if (searchBarVisible) {
+    elements.searchBarContainer.classList.remove('hidden');
+    elements.searchInput.focus();
+  } else {
+    elements.searchBarContainer.classList.add('hidden');
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = null;
+    }
+    elements.searchInput.value = '';
+    searchQuery = '';
+    resetVisibleWindow();
+    renderDynamicUI();
+  }
 }
 
 function handleCategoryClick(event) {
