@@ -101,6 +101,11 @@ function initializeStaticUI() {
 
   ensureCategoryTabsRendered();
 
+  // Derive initial state from the DOM so desktop (md:block) shows correctly
+  searchBarVisible = !elements.searchBarContainer.classList.contains('hidden');
+  mounts.searchToggleBtn.setAttribute('aria-expanded', String(searchBarVisible));
+  mounts.searchToggleBtn.setAttribute('aria-controls', 'searchBarContainer');
+
   elements.searchInput.addEventListener('input', handleSearchInput);
   mounts.searchToggleBtn.addEventListener('click', handleSearchToggle);
   mounts.retryBtn.addEventListener('click', fetchPlaylist);
@@ -155,12 +160,15 @@ function handleSearchInput(event) {
 
 function handleSearchToggle() {
   searchBarVisible = !searchBarVisible;
+  mounts.searchToggleBtn.setAttribute('aria-expanded', String(searchBarVisible));
 
   if (searchBarVisible) {
     elements.searchBarContainer.classList.remove('hidden');
     elements.searchInput.focus();
   } else {
     elements.searchBarContainer.classList.add('hidden');
+    elements.searchInput.blur();
+    mounts.searchToggleBtn.focus();
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = null;
