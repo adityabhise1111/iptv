@@ -2,6 +2,9 @@ import { renderSearchBar } from './components/SearchBar.tsx';
 import { renderVideoPlayer } from './components/VideoPlayer.tsx';
 import { renderCategoryTabs } from './components/CategoryTabs.tsx';
 import { renderChannelGrid } from './components/ChannelGrid.tsx';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import ReactPlayer from 'react-player';
 
 const IPTV_PLAYLIST_URL = 'https://iptv-org.github.io/iptv/index.m3u';
 const VISIBLE_BATCH_SIZE = 80;
@@ -58,7 +61,6 @@ let channelByUrl = new Map();
 let selectedChannel = null;
 let selectedCategory = 'All';
 let searchQuery = '';
-let currentHls = null;
 let searchDebounceTimer = null;
 let switchDebounceTimer = null;
 let playlistAbortController = null;
@@ -69,6 +71,14 @@ let autoRetryTimer = null;
 let isLoadingMore = false;
 let tabsRendered = false;
 let searchBarVisible = false;
+let reactPlayerRoot = null;
+let playerState = {
+  streamUrl: '',
+  isLoading: false,
+  hasError: false,
+  switchToken: 0,
+  attempt: 0
+};
 
 const mounts = {
   searchBar: document.getElementById('searchBarMount'),
@@ -84,6 +94,136 @@ const mounts = {
 
 let elements = {};
 
+function PlayerSurface({
+  streamUrl,
+  isLoading,
+  hasError,
+  onReady,
+  onPlaying,
+  onWaiting,
+  onError
+}) {
+  const hasStream = Boolean(streamUrl);
+
+  return React.createElement(
+    'div',
+    { className: 'relative' },
+    !hasStream
+      ? React.createElement(
+          'div',
+          { className: 'aspect-video bg-gray-700 md:rounded-lg flex items-center justify-center' },
+          React.createElement(
+            'div',
+            { className: 'text-center px-6' },
+            React.createElement(
+              'svg',
+              { className: 'w-16 h-16 mx-auto text-gray-600 mb-3', fill: 'currentColor', viewBox: '0 0 20 20' },
+              React.createElement('path', { d: 'M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z' })
+            ),
+            React.createElement('p', { className: 'text-gray-400' }, 'Select a channel to start watching')
+          )
+        )
+      : React.createElement(
+          'div',
+          { className: 'w-full aspect-video md:rounded-lg overflow-hidden bg-black' },
+          React.createElement(ReactPlayer, {
+            src: streamUrl,
+            width: '100%',
+            height: '100%',
+            controls: true,
+            playing: true,
+            playsInline: true,
+            onReady,
+            onPlaying,
+            onWaiting,
+            onError,
+            config: {
+              file: {
+                forceHLS: isHlsStream(streamUrl),
+                hlsOptions: {
+                  enableWorker: true,
+                  lowLatencyMode: true,
+                  backBufferLength: 30,
+                  maxBufferLength: 20,
+                  maxMaxBufferLength: 30,
+                  liveSyncDurationCount: 3,
+                  manifestLoadingTimeOut: 12000,
+                  fragLoadingTimeOut: 15000
+                }
+              }
+            }
+          })
+        ),
+    React.createElement(
+      'div',
+      {
+        className: `absolute inset-0 bg-gray-900/75 md:rounded-lg flex items-center justify-center ${isLoading ? '' : 'hidden'}`
+      },
+      React.createElement(
+        'div',
+        { className: 'text-center' },
+        React.createElement('div', { className: 'animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-3' }),
+        React.createElement('p', { className: 'text-gray-300' }, 'Loading stream...')
+      )
+    ),
+    React.createElement(
+      'div',
+      {
+        className: `absolute inset-0 bg-gray-900/90 md:rounded-lg flex items-center justify-center ${hasError ? '' : 'hidden'}`
+      },
+      React.createElement(
+        'div',
+        { className: 'text-center p-6' },
+        React.createElement(
+          'svg',
+          { className: 'w-12 h-12 mx-auto text-red-500 mb-3', fill: 'currentColor', viewBox: '0 0 20 20' },
+          React.createElement('path', {
+            fillRule: 'evenodd',
+            d: 'M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z',
+            clipRule: 'evenodd'
+          })
+        ),
+        React.createElement('p', { className: 'text-red-400 font-medium mb-2' }, 'Stream unavailable'),
+        React.createElement('p', { className: 'text-gray-400 text-sm' }, 'This channel may be offline or blocked in your region')
+      )
+    )
+  );
+}
+
+function initializeReactPlayer() {
+  if (!elements.reactPlayerMount) {
+    return;
+  }
+
+  reactPlayerRoot = createRoot(elements.reactPlayerMount);
+  renderReactPlayer();
+}
+
+function renderReactPlayer() {
+  if (!reactPlayerRoot) {
+    return;
+  }
+
+  const switchToken = playerState.switchToken;
+
+  reactPlayerRoot.render(
+    React.createElement(PlayerSurface, {
+      streamUrl: playerState.streamUrl,
+      isLoading: playerState.isLoading,
+      hasError: playerState.hasError,
+      onReady: () => handlePlayerReady(switchToken),
+      onPlaying: () => handlePlayerPlaying(switchToken),
+      onWaiting: () => handlePlayerWaiting(switchToken),
+      onError: (error) => handlePlayerError(error, switchToken)
+    })
+  );
+}
+
+function updatePlayerState(nextState) {
+  playerState = { ...playerState, ...nextState };
+  renderReactPlayer();
+}
+
 function initializeStaticUI() {
   mounts.searchBar.innerHTML = renderSearchBar(searchQuery);
   mounts.videoPlayer.innerHTML = renderVideoPlayer();
@@ -91,13 +231,12 @@ function initializeStaticUI() {
   elements = {
     searchInput: document.getElementById('searchInput'),
     searchBarContainer: document.getElementById('searchBarContainer'),
-    videoPlayer: document.getElementById('videoPlayer'),
-    placeholder: document.getElementById('placeholder'),
-    streamLoading: document.getElementById('streamLoading'),
-    streamError: document.getElementById('streamError'),
+    reactPlayerMount: document.getElementById('reactPlayerRoot'),
     nowPlaying: document.getElementById('nowPlaying'),
     currentChannel: document.getElementById('currentChannel')
   };
+
+  initializeReactPlayer();
 
   ensureCategoryTabsRendered();
 
@@ -114,7 +253,6 @@ function initializeStaticUI() {
   mounts.categoryTabs.addEventListener('click', handleCategoryClick);
   mounts.channelGrid.addEventListener('click', handleChannelClick);
 
-  bindVideoLifecycleListeners();
 }
 
 function ensureCategoryTabsRendered() {
@@ -403,101 +541,20 @@ function loadChannel(channel, attempt = 0) {
   activeSwitchToken += 1;
   const switchToken = activeSwitchToken;
 
-  elements.placeholder.classList.add('hidden');
-  elements.streamError.classList.add('hidden');
-  elements.streamLoading.classList.remove('hidden');
-  elements.videoPlayer.classList.remove('hidden');
   elements.nowPlaying.classList.remove('hidden');
   elements.currentChannel.textContent = channel.name;
 
-  stopCurrentStream();
-
-  const video = elements.videoPlayer;
-  const streamUrl = channel.url;
-  const isLikelyHls = isHlsStream(streamUrl);
-
-  if (isLikelyHls) {
-    attachHlsStream(video, streamUrl, switchToken, channel, attempt);
-    return;
+  if (autoRetryTimer) {
+    clearTimeout(autoRetryTimer);
+    autoRetryTimer = null;
   }
 
-  attachDirectVideoStream(video, streamUrl, switchToken, channel, attempt);
-}
-
-function attachHlsStream(video, streamUrl, switchToken, channel, attempt) {
-  if (!window.Hls && !canUseNativeHls(video)) {
-    showStreamError();
-    return;
-  }
-
-  if (window.Hls && Hls.isSupported()) {
-    currentHls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      backBufferLength: 30,
-      maxBufferLength: 20,
-      maxMaxBufferLength: 30,
-      liveSyncDurationCount: 3,
-      manifestLoadingTimeOut: 12000,
-      fragLoadingTimeOut: 15000
-    });
-
-    currentHls.attachMedia(video);
-    currentHls.loadSource(streamUrl);
-
-    currentHls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (switchToken !== activeSwitchToken) {
-        return;
-      }
-
-      video.play().catch((error) => {
-        console.error('Playback error:', error);
-        retryOrFail(channel, attempt, switchToken);
-      });
-    });
-
-    currentHls.on(Hls.Events.ERROR, (_, data) => {
-      if (switchToken !== activeSwitchToken) {
-        return;
-      }
-
-      if (!data.fatal) {
-        return;
-      }
-
-      if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-        try {
-          currentHls.recoverMediaError();
-          return;
-        } catch (error) {
-          console.error('Recover media error failed:', error);
-        }
-      }
-
-      retryOrFail(channel, attempt, switchToken);
-    });
-
-    return;
-  }
-
-  if (canUseNativeHls(video)) {
-    attachDirectVideoStream(video, streamUrl, switchToken, channel, attempt);
-    return;
-  }
-
-  showStreamError();
-}
-
-function attachDirectVideoStream(video, streamUrl, switchToken, channel, attempt) {
-  video.src = streamUrl;
-  video.load();
-  video.play().catch((error) => {
-    if (switchToken !== activeSwitchToken) {
-      return;
-    }
-
-    console.error('Direct playback error:', error);
-    retryOrFail(channel, attempt, switchToken);
+  updatePlayerState({
+    streamUrl: channel.url,
+    isLoading: true,
+    hasError: false,
+    switchToken,
+    attempt
   });
 }
 
@@ -528,18 +585,42 @@ function isHlsStream(url) {
   return /\.m3u8($|\?)/i.test(url);
 }
 
-function canUseNativeHls(video) {
-  return video.canPlayType('application/vnd.apple.mpegurl') !== '';
+function handlePlayerReady(switchToken) {
+  if (switchToken !== activeSwitchToken) {
+    return;
+  }
+
+  hideStreamLoading();
 }
 
-function bindVideoLifecycleListeners() {
-  const video = elements.videoPlayer;
+function handlePlayerPlaying(switchToken) {
+  if (switchToken !== activeSwitchToken) {
+    return;
+  }
 
-  video.addEventListener('playing', hideStreamLoading);
-  video.addEventListener('canplay', hideStreamLoading);
-  video.addEventListener('waiting', showStreamLoading);
-  video.addEventListener('stalled', showStreamLoading);
-  video.addEventListener('error', showStreamError);
+  hideStreamLoading();
+}
+
+function handlePlayerWaiting(switchToken) {
+  if (switchToken !== activeSwitchToken) {
+    return;
+  }
+
+  showStreamLoading();
+}
+
+function handlePlayerError(error, switchToken) {
+  if (switchToken !== activeSwitchToken) {
+    return;
+  }
+
+  if (!selectedChannel) {
+    showStreamError();
+    return;
+  }
+
+  console.error('Playback error:', error);
+  retryOrFail(selectedChannel, playerState.attempt, switchToken);
 }
 
 function showStreamLoading() {
@@ -547,7 +628,7 @@ function showStreamLoading() {
     return;
   }
 
-  elements.streamLoading.classList.remove('hidden');
+  updatePlayerState({ isLoading: true, hasError: false });
 }
 
 function stopCurrentStream() {
@@ -556,19 +637,15 @@ function stopCurrentStream() {
     autoRetryTimer = null;
   }
 
-  if (currentHls) {
-    currentHls.destroy();
-    currentHls = null;
-  }
-
-  const video = elements.videoPlayer;
-  video.pause();
-  video.removeAttribute('src');
-  video.load();
+  updatePlayerState({
+    streamUrl: '',
+    isLoading: false,
+    hasError: false
+  });
 }
 
 function hideStreamLoading() {
-  elements.streamLoading.classList.add('hidden');
+  updatePlayerState({ isLoading: false, hasError: false });
 
   if (selectedChannel) {
     try {
@@ -580,8 +657,7 @@ function hideStreamLoading() {
 }
 
 function showStreamError() {
-  elements.streamLoading.classList.add('hidden');
-  elements.streamError.classList.remove('hidden');
+  updatePlayerState({ isLoading: false, hasError: true });
 }
 
 function resumeLastPlayedChannel() {
